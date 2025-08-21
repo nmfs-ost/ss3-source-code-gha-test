@@ -10,14 +10,61 @@ on:
 jobs:
   artifacts-url-comments:
     name: add artifact links to pull request and related issues job
-    if: ${{ github.event.workflow_run.event == 'pull_request' }} && ${{ github.event.workflow_run.conclusion == 'success' }}
+    # This 'if' condition ensures the job only runs if the parent workflow was a PR
+    # AND that PR has a number (i.e., it's not empty).
+    if: |
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.pull_requests[0].number
     runs-on: ubuntu-latest
     steps:
-      - name: add artifact links to PR and issues
-        uses: tonyhallett/artifacts-url-comments@v1.1.0
-        env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get Pull Request Number and Parent Run Details
+        id: get_pr_details
+        run: |
+          # Extract the PR number from the workflow_run event payload.
+          # The 'pull_requests' array contains objects, we need the 'number' property.
+          PR_NUMBER=$(echo '${{ github.event.workflow_run.pull_requests[0].number }}')
+          # Get details about the parent workflow run to construct the artifact URL.
+          PARENT_RUN_ID=${{ github.event.workflow_run.id }}
+          PARENT_REPO_OWNER=$(echo '${{ github.event.workflow_run.repository.owner.login }}')
+          PARENT_REPO_NAME=$(echo '${{ github.event.workflow_run.repository.name }}')
+
+          echo "Found PR Number: $PR_NUMBER"
+          echo "Parent Run ID: $PARENT_RUN_ID"
+          echo "Parent Repo: $PARENT_REPO_OWNER/$PARENT_REPO_NAME"
+
+          # Output these values for subsequent steps to use.
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "parent_run_id=$PARENT_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "parent_repo_owner=$PARENT_REPO_OWNER" >> "$GITHUB_OUTPUT"
+          echo "parent_repo_name=$PARENT_REPO_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Artifact Links Comment Body
+        id: generate_comment
+        run: |
+          # Retrieve outputs from the previous step.
+          PR_NUMBER=${{ steps.get_pr_details.outputs.pr_number }}
+          PARENT_RUN_ID=${{ steps.get_pr_details.outputs.parent_run_id }}
+          PARENT_REPO_OWNER=${{ steps.get_pr_details.outputs.parent_repo_owner }}
+          PARENT_REPO_NAME=${{ steps.get_pr_details.outputs.parent_repo_name }}
+
+          # Construct the URL to the artifacts section of the parent workflow run.
+          ARTIFACTS_URL="https://github.com/$PARENT_REPO_OWNER/$PARENT_REPO_NAME/actions/runs/$PARENT_RUN_ID/artifacts"
+          
+          # Create the comment body using Markdown.
+          COMMENT_BODY="Here are the successful executable builds from your PR:
+          
+          You can find all artifacts for the build workflow run [here]($ARTIFACTS_URL).
+          "
+          # Output the comment body. Using 'EOF' for multi-line strings.
+          echo "comment_body<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$COMMENT_BODY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create or Update PR Comment
+        uses: peter-evans/create-or-update-comment@v3
         with:
-            prefix: 'Here are the successful executable builds from your PR:'
-            format: name
-            addTo: pull
+          # The issue-number input is used for both issues and pull requests.
+          issue-number: ${{ steps.get_pr_details.outputs.pr_number }}
+          # Pass the generated comment body.
+          body: ${{ steps.generate_comment.outputs.comment_body }}
