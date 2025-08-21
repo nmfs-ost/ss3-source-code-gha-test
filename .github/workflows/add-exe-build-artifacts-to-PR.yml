@@ -76,20 +76,14 @@ jobs:
       - name: Generate PR Comment Body
         id: generate_comment_body
         run: |
-          # Retrieve outputs from previous steps.
-          PR_NUMBER=${{ steps.get_pr_details.outputs.pr_number }}
-          PARENT_RUN_ID=${{ steps.get_pr_details.outputs.parent_run_id }}
-          PARENT_REPO_OWNER=${{ steps.get_pr_details.outputs.parent_repo_owner }}
-          PARENT_REPO_NAME=${{ steps.get_pr_details.outputs.parent_repo_name }}
-          ARTIFACT_LINKS_MARKDOWN=${{ steps.get_artifacts.outputs.artifact_links_markdown }}
-
           # Construct the URL to the main workflow run page.
-          WORKFLOW_RUN_URL="https://github.com/$PARENT_REPO_OWNER/$PARENT_REPO_NAME/actions/runs/$PARENT_RUN_ID"
+          WORKFLOW_RUN_URL="https://github.com/${{ steps.get_pr_details.outputs.parent_repo_owner }}/${{ steps.get_pr_details.outputs.parent_repo_name }}/actions/runs/${{ steps.get_pr_details.outputs.parent_run_id }}"
           
           # Create the comment body using Markdown.
+          # Directly embed the outputs using ${{ }} syntax to avoid shell interpretation issues with multi-line strings.
           COMMENT_BODY="Here are the successful executable builds from your PR:
           
-          ${ARTIFACT_LINKS_MARKDOWN}
+          ${{ steps.get_artifacts.outputs.artifact_links_markdown }}
           
           You can also view the full workflow run details [here]($WORKFLOW_RUN_URL).
           "
