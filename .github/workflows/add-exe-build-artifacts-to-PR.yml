@@ -62,7 +62,7 @@ jobs:
             if (artifacts.data.artifacts.length > 0) {
               artifactLinks += "### Direct Download Links:\n";
               artifacts.data.artifacts.forEach(artifact => {
-                // Construct the direct download URL for each artifact
+                # Construct the direct download URL for each artifact
                 const downloadUrl = `https://github.com/${repo_owner}/${repo_name}/actions/runs/${run_id}/artifacts/${artifact.id}/zip`;
                 artifactLinks += `- [${artifact.name}](${downloadUrl})\n`;
               });
@@ -75,15 +75,18 @@ jobs:
 
       - name: Generate PR Comment Body
         id: generate_comment_body
+        env:
+          # Pass the multi-line markdown as an environment variable
+          ARTIFACT_LINKS: ${{ steps.get_artifacts.outputs.artifact_links_markdown }}
         run: |
           # Construct the URL to the main workflow run page.
           WORKFLOW_RUN_URL="https://github.com/${{ steps.get_pr_details.outputs.parent_repo_owner }}/${{ steps.get_pr_details.outputs.parent_repo_name }}/actions/runs/${{ steps.get_pr_details.outputs.parent_run_id }}"
           
           # Create the comment body using Markdown.
-          # Directly embed the outputs using ${{ }} syntax to avoid shell interpretation issues with multi-line strings.
+          # Reference the environment variable directly within the shell script.
           COMMENT_BODY="Here are the successful executable builds from your PR:
           
-          ${{ steps.get_artifacts.outputs.artifact_links_markdown }}
+          $ARTIFACT_LINKS
           
           You can also view the full workflow run details [here]($WORKFLOW_RUN_URL).
           "
