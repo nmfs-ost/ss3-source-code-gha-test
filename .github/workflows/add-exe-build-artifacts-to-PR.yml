@@ -5,7 +5,7 @@ on:
     workflows: ["build-ss3"]
     types:
       - completed
-  workflow_dispatch:
+  workflow_dispatch: 
 
 jobs:
   artifacts-url-comments:
@@ -22,39 +22,76 @@ jobs:
         id: get_pr_details
         run: |
           # Extract the PR number from the workflow_run event payload.
-          # The 'pull_requests' array contains objects, we need the 'number' property.
           PR_NUMBER=$(echo '${{ github.event.workflow_run.pull_requests[0].number }}')
           # Get details about the parent workflow run to construct the artifact URL.
           PARENT_RUN_ID=${{ github.event.workflow_run.id }}
           PARENT_REPO_OWNER=$(echo '${{ github.event.workflow_run.repository.owner.login }}')
           PARENT_REPO_NAME=$(echo '${{ github.event.workflow_run.repository.name }}')
+          PARENT_WORKFLOW_ID=${{ github.event.workflow_run.workflow_id }}
 
           echo "Found PR Number: $PR_NUMBER"
           echo "Parent Run ID: $PARENT_RUN_ID"
           echo "Parent Repo: $PARENT_REPO_OWNER/$PARENT_REPO_NAME"
+          echo "Parent Workflow ID: $PARENT_WORKFLOW_ID"
 
           # Output these values for subsequent steps to use.
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "parent_run_id=$PARENT_RUN_ID" >> "$GITHUB_OUTPUT"
           echo "parent_repo_owner=$PARENT_REPO_OWNER" >> "$GITHUB_OUTPUT"
           echo "parent_repo_name=$PARENT_REPO_NAME" >> "$GITHUB_OUTPUT"
+          echo "parent_workflow_id=$PARENT_WORKFLOW_ID" >> "$GITHUB_OUTPUT"
 
-      - name: Generate Artifact Links Comment Body
-        id: generate_comment
+      - name: Get Artifacts List and Generate Direct Download Links
+        id: get_artifacts
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run_id = '${{ steps.get_pr_details.outputs.parent_run_id }}';
+            const repo_owner = '${{ steps.get_pr_details.outputs.parent_repo_owner }}';
+            const repo_name = '${{ steps.get_pr_details.outputs.parent_repo_name }}';
+
+            console.log(`Fetching artifacts for run ID: ${run_id}`);
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: repo_owner,
+              repo: repo_name,
+              run_id: run_id,
+            });
+
+            let artifactLinks = "";
+            if (artifacts.data.artifacts.length > 0) {
+              artifactLinks += "### Direct Download Links:\n";
+              artifacts.data.artifacts.forEach(artifact => {
+                // Construct the direct download URL for each artifact
+                const downloadUrl = `https://github.com/${repo_owner}/${repo_name}/actions/runs/${run_id}/artifacts/${artifact.id}/zip`;
+                artifactLinks += `- [${artifact.name}](${downloadUrl})\n`;
+              });
+            } else {
+              artifactLinks = "No artifacts found for this build run.";
+            }
+
+            console.log("Generated Artifact Links:\n" + artifactLinks);
+            core.setOutput('artifact_links_markdown', artifactLinks);
+
+      - name: Generate PR Comment Body
+        id: generate_comment_body
         run: |
-          # Retrieve outputs from the previous step.
+          # Retrieve outputs from previous steps.
           PR_NUMBER=${{ steps.get_pr_details.outputs.pr_number }}
           PARENT_RUN_ID=${{ steps.get_pr_details.outputs.parent_run_id }}
           PARENT_REPO_OWNER=${{ steps.get_pr_details.outputs.parent_repo_owner }}
           PARENT_REPO_NAME=${{ steps.get_pr_details.outputs.parent_repo_name }}
+          ARTIFACT_LINKS_MARKDOWN=${{ steps.get_artifacts.outputs.artifact_links_markdown }}
 
-          # Construct the URL to the artifacts section of the parent workflow run.
-          ARTIFACTS_URL="https://github.com/$PARENT_REPO_OWNER/$PARENT_REPO_NAME/actions/runs/$PARENT_RUN_ID/artifacts"
+          # Construct the URL to the main workflow run page.
+          WORKFLOW_RUN_URL="https://github.com/$PARENT_REPO_OWNER/$PARENT_REPO_NAME/actions/runs/$PARENT_RUN_ID"
           
           # Create the comment body using Markdown.
           COMMENT_BODY="Here are the successful executable builds from your PR:
           
-          You can find all artifacts for the build workflow run [here]($ARTIFACTS_URL).
+          ${ARTIFACT_LINKS_MARKDOWN}
+          
+          You can also view the full workflow run details [here]($WORKFLOW_RUN_URL).
           "
           # Output the comment body. Using 'EOF' for multi-line strings.
           echo "comment_body<<EOF" >> "$GITHUB_OUTPUT"
@@ -64,7 +101,8 @@ jobs:
       - name: Create or Update PR Comment
         uses: peter-evans/create-or-update-comment@v3
         with:
-          # The issue-number input is used for both issues and pull requests.
           issue-number: ${{ steps.get_pr_details.outputs.pr_number }}
-          # Pass the generated comment body.
-          body: ${{ steps.generate_comment.outputs.comment_body }}
+          body: ${{ steps.generate_comment_body.outputs.comment_body }}
+          # Optional: Add a comment identifier if you want to update this specific comment later
+          # comment-id: 'artifacts-link-comment'
+          # edit-mode: replace # Use 'replace' to update the comment if it already exists
