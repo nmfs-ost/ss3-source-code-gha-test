@@ -38,7 +38,7 @@ jobs:
           echo "parent_repo_name=$PARENT_REPO_NAME" >> "$GITHUB_OUTPUT"
           echo "parent_workflow_id=$PARENT_WORKFLOW_ID" >> "$GITHUB_OUTPUT"
 
-      - name: Get Artifacts List and Generate Official API Download Links
+      - name: Get Artifacts List and Generate Direct Download Links
         id: get_artifacts
         uses: actions/github-script@v6
         with:
@@ -55,18 +55,11 @@ jobs:
 
             let artifactLinks = "";
             if (artifacts.data.artifacts.length > 0) {
-              artifactLinks += "### Artifact Download via API\n";
-              artifactLinks += "> **How to download:**\n";
-              artifactLinks += "> 1. Copy the API link below\n";
-              artifactLinks += "> 2. Run the following command, replacing `<YOUR_TOKEN>` with your GitHub personal access token (with `repo` permissions):\n";
-              artifactLinks += ">\n";
-              artifactLinks += "> ```sh\n";
-              artifactLinks += "> curl -L -H \"Authorization: token <YOUR_TOKEN>\" <API_LINK> -o <OUTPUT_FILE>\n";
-              artifactLinks += "> ```\n\n";
-
+              artifactLinks += "### Direct Download Links\n";
+              artifactLinks += "> Click the links below to download. You must be logged into GitHub and have access to this repository. Artifacts expire after the retention period (default: 90 days).\n\n";
               artifacts.data.artifacts.forEach(artifact => {
-                const apiUrl = `https://api.github.com/repos/${repo_owner}/${repo_name}/actions/artifacts/${artifact.id}/zip`;
-                artifactLinks += `- [${artifact.name}](${apiUrl})\n`;
+                const downloadUrl = `https://github.com/${repo_owner}/${repo_name}/actions/runs/${run_id}/artifacts/${artifact.id}/zip`;
+                artifactLinks += `- [${artifact.name}](${downloadUrl})\n`;
               });
             } else {
               artifactLinks = "No artifacts found for this build run.";
@@ -80,11 +73,9 @@ jobs:
           ARTIFACT_LINKS: ${{ steps.get_artifacts.outputs.artifact_links_markdown }}
         run: |
           WORKFLOW_RUN_URL="https://github.com/${{ steps.get_pr_details.outputs.parent_repo_owner }}/${{ steps.get_pr_details.outputs.parent_repo_name }}/actions/runs/${{ steps.get_pr_details.outputs.parent_run_id }}"
-          COMMENT_BODY="Here are the successful executable builds from your PR (download via GitHub API):
+          COMMENT_BODY="Here are the successful executable builds from your PR:
 
           $ARTIFACT_LINKS
-
-          *Note: You must be logged into GitHub and have a valid personal access token to download these artifacts. Artifacts expire after the retention period (default: 90 days). For security, do not share your token.*
 
           You can also view the full workflow run details [here]($WORKFLOW_RUN_URL).
           "
