@@ -38,17 +38,15 @@ jobs:
           echo "parent_repo_name=$PARENT_REPO_NAME" >> "$GITHUB_OUTPUT"
           echo "parent_workflow_id=$PARENT_WORKFLOW_ID" >> "$GITHUB_OUTPUT"
 
-      - name: Get Artifacts List and Generate Direct Download Links
+      - name: Get Artifacts List and Generate Official API Download Links
         id: get_artifacts
         uses: actions/github-script@v6
         with:
           script: |
-            const { owner, repo } = context.repo;
-            const run_id = '${{ steps.get_pr_details.outputs.parent_run_id }}';
             const repo_owner = '${{ steps.get_pr_details.outputs.parent_repo_owner }}';
             const repo_name = '${{ steps.get_pr_details.outputs.parent_repo_name }}';
+            const run_id = '${{ steps.get_pr_details.outputs.parent_run_id }}';
 
-            console.log(`Fetching artifacts for run ID: ${run_id}`);
             const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
               owner: repo_owner,
               repo: repo_name,
@@ -57,36 +55,39 @@ jobs:
 
             let artifactLinks = "";
             if (artifacts.data.artifacts.length > 0) {
-              artifactLinks += "### Direct Download Links:\n";
+              artifactLinks += "### Artifact Download via API\n";
+              artifactLinks += "> **How to download:**\n";
+              artifactLinks += "> 1. Copy the API link below\n";
+              artifactLinks += "> 2. Run the following command, replacing `<YOUR_TOKEN>` with your GitHub personal access token (with `repo` permissions):\n";
+              artifactLinks += ">\n";
+              artifactLinks += "> ```sh\n";
+              artifactLinks += "> curl -L -H \"Authorization: token <YOUR_TOKEN>\" <API_LINK> -o <OUTPUT_FILE>\n";
+              artifactLinks += "> ```\n\n";
+
               artifacts.data.artifacts.forEach(artifact => {
-                const downloadUrl = `https://github.com/${repo_owner}/${repo_name}/actions/runs/${run_id}/artifacts/${artifact.id}/zip`;
-                artifactLinks += `- [${artifact.name}](${downloadUrl})\n`;
+                const apiUrl = `https://api.github.com/repos/${repo_owner}/${repo_name}/actions/artifacts/${artifact.id}/zip`;
+                artifactLinks += `- [${artifact.name}](${apiUrl})\n`;
               });
             } else {
               artifactLinks = "No artifacts found for this build run.";
             }
 
-            console.log("Generated Artifact Links:\n" + artifactLinks);
             core.setOutput('artifact_links_markdown', artifactLinks);
 
       - name: Generate PR Comment Body
         id: generate_comment_body
         env:
-          # Pass the multi-line markdown as an environment variable
           ARTIFACT_LINKS: ${{ steps.get_artifacts.outputs.artifact_links_markdown }}
         run: |
-          # Construct the URL to the main workflow run page.
           WORKFLOW_RUN_URL="https://github.com/${{ steps.get_pr_details.outputs.parent_repo_owner }}/${{ steps.get_pr_details.outputs.parent_repo_name }}/actions/runs/${{ steps.get_pr_details.outputs.parent_run_id }}"
-          
-          # Create the comment body using Markdown.
-          # Reference the environment variable directly within the shell script.
-          COMMENT_BODY="Here are the successful executable builds from your PR:
-          
+          COMMENT_BODY="Here are the successful executable builds from your PR (download via GitHub API):
+
           $ARTIFACT_LINKS
-          
+
+          *Note: You must be logged into GitHub and have a valid personal access token to download these artifacts. Artifacts expire after the retention period (default: 90 days). For security, do not share your token.*
+
           You can also view the full workflow run details [here]($WORKFLOW_RUN_URL).
           "
-          # Output the comment body. Using 'EOF' for multi-line strings.
           echo "comment_body<<EOF" >> "$GITHUB_OUTPUT"
           echo "$COMMENT_BODY" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
