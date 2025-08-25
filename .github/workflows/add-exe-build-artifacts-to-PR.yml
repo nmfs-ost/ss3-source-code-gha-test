@@ -12,21 +12,18 @@ jobs:
     name: add artifact links to pull request and related issues job
     # This 'if' condition ensures the job only runs if the parent workflow was a PR
     # AND that PR has a number (i.e., it's not empty).
-    if: |
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.pull_requests[0].number
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0].number
     runs-on: ubuntu-latest
     steps:
       - name: Get Pull Request Number and Parent Run Details
         id: get_pr_details
         run: |
           # Extract the PR number from the workflow_run event payload.
-          PR_NUMBER=$(echo '${{ github.event.workflow_run.pull_requests[0].number }}')
+          PR_NUMBER=${{ github.event.workflow_run.pull_requests[0].number }}
           # Get details about the parent workflow run to construct the artifact URL.
           PARENT_RUN_ID=${{ github.event.workflow_run.id }}
-          PARENT_REPO_OWNER=$(echo '${{ github.event.workflow_run.repository.owner.login }}')
-          PARENT_REPO_NAME=$(echo '${{ github.event.workflow_run.repository.name }}')
+          PARENT_REPO_OWNER=${{ github.event.workflow_run.repository.owner.login }}
+          PARENT_REPO_NAME=${{ github.event.workflow_run.repository.name }}
           PARENT_WORKFLOW_ID=${{ github.event.workflow_run.workflow_id }}
 
           echo "Found PR Number: $PR_NUMBER"
@@ -62,7 +59,6 @@ jobs:
             if (artifacts.data.artifacts.length > 0) {
               artifactLinks += "### Direct Download Links:\n";
               artifacts.data.artifacts.forEach(artifact => {
-                # Construct the direct download URL for each artifact
                 const downloadUrl = `https://github.com/${repo_owner}/${repo_name}/actions/runs/${run_id}/artifacts/${artifact.id}/zip`;
                 artifactLinks += `- [${artifact.name}](${downloadUrl})\n`;
               });
